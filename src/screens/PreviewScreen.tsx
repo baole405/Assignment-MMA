@@ -17,24 +17,36 @@ import { colors, radius, spacing, typography } from "@/src/theme/tokens";
 import { formatBytes } from "@/src/utils/image";
 import { uploadImage } from "@/src/services/upload";
 
-interface PreviewParams {
-  uri?: string;
-  width?: string;
-  height?: string;
-  size?: string;
-  originalSize?: string;
-}
+type PreviewSearchParams = {
+  uri?: string | string[];
+  width?: string | string[];
+  height?: string | string[];
+  size?: string | string[];
+  originalSize?: string | string[];
+};
+
+const extractSingle = (value?: string | string[]) =>
+  Array.isArray(value) ? value[0] : value;
+
+const parseSize = (value?: string | string[]) => {
+  const parsedValue = extractSingle(value);
+  if (!parsedValue) {
+    return undefined;
+  }
+  const numeric = Number(parsedValue);
+  return Number.isFinite(numeric) ? numeric : undefined;
+};
 
 export function PreviewScreen() {
-  const params = useLocalSearchParams<PreviewParams>();
+  const params = useLocalSearchParams() as PreviewSearchParams;
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [mediaPermission, requestMediaPermission] = MediaLibrary.usePermissions();
 
-  const uri = params.uri ?? "";
-  const processedSize = params.size ? Number(params.size) : undefined;
-  const originalSize = params.originalSize ? Number(params.originalSize) : undefined;
+  const uri = extractSingle(params.uri) ?? "";
+  const processedSize = parseSize(params.size);
+  const originalSize = parseSize(params.originalSize);
 
   const sizeLabel = useMemo(() => {
     if (!processedSize) {

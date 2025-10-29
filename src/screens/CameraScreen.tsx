@@ -87,13 +87,13 @@ export function CameraScreen() {
   }, []);
 
   const handleToggleFlash = useCallback(() => {
-    setFlashMode((current) =>
+    setFlashMode((current: FlashMode) =>
       current === FlashMode.off ? FlashMode.on : FlashMode.off
     );
   }, []);
 
   const handleSwitchCamera = useCallback(() => {
-    setCameraType((current) =>
+    setCameraType((current: CameraType) =>
       current === CameraType.back ? CameraType.front : CameraType.back
     );
   }, []);
