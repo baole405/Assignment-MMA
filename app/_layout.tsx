@@ -33,6 +33,14 @@ export default function RootLayout() {
             headerShown: false,
           }}
         />
+        <Stack.Screen
+          name="preview"
+          options={{
+            title: "Xem trước ảnh",
+            headerShown: false,
+            animation: "slide_from_right",
+          }}
+        />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
