@@ -13,20 +13,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useFocusEffect, useRouter } from "expo-router";
 import Search from "@/components/search/component";
-
-type Favorite = {
-  id: string;
-  artName: string;
-  price: number;
-  description: string;
-  image: string;
-  brand: string;
-  limitedTimeDeal: number;
-};
+import { ArtTool } from "@/types/artTool";
 
 const FavoriteList = () => {
   const router = useRouter();
-  const [Favorites, setFavorites] = useState<Favorite[]>([]);
+  const [Favorites, setFavorites] = useState<ArtTool[]>([]);
   const [searchText, setSearchText] = useState("");
 
   // Load saved favorites từ AsyncStorage khi focus vào screen
@@ -93,26 +84,21 @@ const FavoriteList = () => {
           keyExtractor={(item) => item.id}
           numColumns={2}
           renderItem={({ item }) => (
-            <View style={styles.card}>
-              <Pressable
-                style={styles.moreBtn}
-                onPress={() => router.push(`/details?id=${item.id}`)}
-              >
-                <MaterialCommunityIcons
-                  name="dots-horizontal-circle-outline"
-                  size={22}
-                  color="#555"
-                />
-              </Pressable>
-
+            <Pressable
+              style={styles.card}
+              onPress={() => router.push(`/details?id=${item.id}`)}
+            >
               <Pressable
                 style={styles.loveBtn}
-                onPress={() => removeFavorite(item.id)}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  removeFavorite(item.id);
+                }}
               >
                 <MaterialCommunityIcons
                   name="cards-heart"
                   size={24}
-                  color="black  "
+                  color="black"
                 />
               </Pressable>
 
@@ -124,12 +110,12 @@ const FavoriteList = () => {
                   currency: "USD",
                 })}
               </Text>
-              {item.limitedTimeDeal > 0 && (
+              {Number(item.limitedTimeDeal ?? 0) > 0 && (
                 <Text style={styles.cardDeal}>
-                  -{(item.limitedTimeDeal * 100).toFixed(0)}%
+                  -{(Number(item.limitedTimeDeal) * 100).toFixed(0)}%
                 </Text>
               )}
-            </View>
+            </Pressable>
           )}
         />
       )}
@@ -198,6 +184,5 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     overflow: "hidden",
   },
-  moreBtn: { position: "absolute", top: 8, right: 8, zIndex: 10 },
   loveBtn: { position: "absolute", left: 8, top: 8, zIndex: 10 },
 });

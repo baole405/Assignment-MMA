@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { generateTextFromGemini } from "@/api/gemini";
 import { SafeAreaView } from "react-native-safe-area-context";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function ChatBox() {
   const [messages, setMessages] = useState<{ sender: string; text: string }[]>(
@@ -26,9 +27,33 @@ export default function ChatBox() {
     setLoading(true);
 
     try {
-      const reply = await generateTextFromGemini(input);
-      const botMsg = { sender: "bot", text: reply };
-      setMessages((prev) => [...prev, botMsg]);
+      // Load local favorites (if any) and create a small context summary
+      const raw = await AsyncStorage.getItem('savedProducts');
+      const favorites = raw ? JSON.parse(raw) : [];
+
+      // Simple local intent handling: if the user asks about count of favorites,
+      // answer locally without calling the LLM (faster, private, cheaper).
+      const lower = input.toLowerCase();
+      const asksCount = /how many|bao nhi(e|ê)u|số lượng|có bao nhiêu/.test(lower);
+      const mentionsFav = /favorite|favorites|yêu thích|danh sách yêu thích/.test(lower);
+
+      if (asksCount && mentionsFav) {
+        const count = Array.isArray(favorites) ? favorites.length : 0;
+        const names = (favorites || []).slice(0, 5).map((f: any) => f.name).filter(Boolean);
+        const summary = `Bạn có ${count} mục trong danh sách yêu thích.` + (names.length ? ` Ví dụ: ${names.join(', ')}${(favorites.length>5 ? ', ...' : '')}` : '');
+        const botMsg = { sender: 'bot', text: summary };
+        setMessages((prev) => [...prev, botMsg]);
+      } else {
+        // Build a short context for the LLM: count + up to 10 item names (avoid sending entire DB)
+        const count = Array.isArray(favorites) ? favorites.length : 0;
+        const names = (favorites || []).slice(0, 10).map((f: any) => f.name).filter(Boolean);
+        const context = `LOCAL_FAVORITES_COUNT: ${count}\nLOCAL_FAVORITES_NAMES: ${names.join('; ')}`;
+        const promptWithContext = `${context}\nUser asked: ${input}\nPlease answer in Vietnamese when appropriate.`;
+
+        const reply = await generateTextFromGemini(promptWithContext);
+        const botMsg = { sender: "bot", text: reply };
+        setMessages((prev) => [...prev, botMsg]);
+      }
     } catch (err) {
       const errorMsg = {
         sender: "bot",

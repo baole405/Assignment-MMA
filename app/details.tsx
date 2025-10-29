@@ -1,8 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Image,
   Pressable,
   ScrollView,
@@ -10,25 +12,42 @@ import {
   Text,
   TouchableOpacity,
   View,
-  Alert,
 } from "react-native";
-import productData from "@/data/data";
 
-type Product = (typeof productData)[any];
+import { fetchArtTool } from "@/api/artTools";
+import { ArtTool } from "@/types/artTool";
 
 export default function DetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const [product, setProduct] = useState<Product | null>(null);
-  const [savedProducts, setSavedProducts] = useState<Product[]>([]);
+  const [product, setProduct] = useState<ArtTool | null>(null);
+  const [savedProducts, setSavedProducts] = useState<ArtTool[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Load product từ productData
-  useEffect(() => {
-    const found = productData.find((p) => p.id === id);
-    setProduct(found || null);
+  const loadProduct = useCallback(async () => {
+    if (!id) {
+      setError("Thiếu mã sản phẩm để tải chi tiết.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await fetchArtTool(id);
+      setProduct(data);
+    } catch (err) {
+      console.error("Error fetching product detail:", err);
+      setError("Không thể tải thông tin chi tiết từ mockapi.io.");
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
-  // Load danh sách favorite từ AsyncStorage
+  useEffect(() => {
+    loadProduct();
+  }, [loadProduct]);
+
   useEffect(() => {
     const loadSavedProducts = async () => {
       try {
@@ -43,8 +62,7 @@ export default function DetailsScreen() {
     loadSavedProducts();
   }, []);
 
-  // Toggle favorite
-  const toggleFavorite = async (p: Product) => {
+  const toggleFavorite = async (p: ArtTool) => {
     try {
       let newSaved = [...savedProducts];
       if (newSaved.some((item) => item.id === p.id)) {
@@ -60,42 +78,95 @@ export default function DetailsScreen() {
     }
   };
 
+  const feedbacks = useMemo(() => product?.feedbacks ?? [], [product]);
+  const averageRating = useMemo(() => {
+    if (!feedbacks.length) return 0;
+    return feedbacks.reduce((acc, f) => acc + f.rating, 0) / feedbacks.length;
+  }, [feedbacks]);
+  const ratingGroups = useMemo(
+    () =>
+      [5, 4, 3, 2, 1].map((rating) => ({
+        rating,
+        count: feedbacks.filter((f) => f.rating === rating).length,
+      })),
+    [feedbacks]
+  );
+
+  const isFavorite = useMemo(() => {
+    if (!product) return false;
+    return savedProducts.some((fav) => fav.id === product.id);
+  }, [savedProducts, product]);
+
+  if (loading) {
+    return (
+      <Pressable style={styles.overlay} onPress={() => router.back()}>
+        <View style={styles.loadingCard}>
+          <ActivityIndicator size="large" color="#e53935" />
+        </View>
+      </Pressable>
+    );
+  }
+
+  if (error) {
+    return (
+      <Pressable style={styles.overlay} onPress={() => router.back()}>
+        <Pressable
+          style={styles.card}
+          onPress={(event) => event.stopPropagation()}
+        >
+          <Text style={styles.errorTitle}>Đã xảy ra lỗi</Text>
+          <Text style={styles.errorMessage}>{error}</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={loadProduct}>
+            <Text style={styles.retryText}>Thử lại</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.retryBtn, styles.closeBtn]}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.retryText}>Đóng</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    );
+  }
+
   if (!product) {
     return (
-      <View style={styles.overlay}>
-        <View style={styles.card}>
+      <Pressable style={styles.overlay} onPress={() => router.back()}>
+        <Pressable
+          style={styles.card}
+          onPress={(event) => event.stopPropagation()}
+        >
           <Text style={styles.title}>Product not exists</Text>
           <TouchableOpacity
             style={styles.closeBtn}
             onPress={() => router.back()}
           >
-            <Text style={styles.closeText}>Close</Text>
+            <Text style={styles.retryText}>Close</Text>
           </TouchableOpacity>
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     );
   }
 
-  const feedbacks = product.feedbacks ?? [];
-  const averageRating = feedbacks.length
-    ? feedbacks.reduce((acc, f) => acc + f.rating, 0) / feedbacks.length
-    : 0;
-  const ratingGroups: { rating: number; count: number }[] = [5, 4, 3, 2, 1].map(
-    (r) => ({
-      rating: r,
-      count: feedbacks.filter((f) => f.rating === r).length,
-    })
-  );
-
-  const isFavorite = savedProducts.some((fav) => fav.id === product.id);
+  const dealValue = Number(product.limitedTimeDeal ?? 0);
 
   return (
-    <View style={styles.overlay}>
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <View style={styles.card}>
+    <Pressable style={styles.overlay} onPress={() => router.back()}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        <Pressable
+          style={styles.card}
+          onPress={(event) => event.stopPropagation()}
+        >
           <Pressable
             style={styles.loveBtn}
-            onPress={() => toggleFavorite(product)}
+            onPress={(event) => {
+              event.stopPropagation();
+              toggleFavorite(product);
+            }}
           >
             <MaterialCommunityIcons
               name={isFavorite ? "cards-heart" : "cards-heart-outline"}
@@ -113,15 +184,14 @@ export default function DetailsScreen() {
               currency: "USD",
             })}
           </Text>
-          {product.limitedTimeDeal > 0 && (
+          {dealValue > 0 && (
             <Text style={styles.deal}>
-              -{Math.round(product.limitedTimeDeal * 100)}%
+              -{Math.round(dealValue * 100)}%
             </Text>
           )}
           <Text style={styles.description}>{product.description}</Text>
           <Text style={styles.brand}>Brand: {product.brand}</Text>
 
-          {/* Feedback Section */}
           <View style={styles.feedbackSection}>
             <Text style={styles.feedbackTitle}>Feedback</Text>
             <Text style={styles.average}>
@@ -129,32 +199,25 @@ export default function DetailsScreen() {
               reviews)
             </Text>
             <View style={styles.ratingGroupContainer}>
-              {ratingGroups.map((g) => (
-                <Text key={g.rating}>
-                  {g.rating}⭐: {g.count}
+              {ratingGroups.map((group) => (
+                <Text key={group.rating}>
+                  {group.rating}⭐: {group.count}
                 </Text>
               ))}
             </View>
-            {feedbacks.map((f, index) => (
+            {feedbacks.map((fb, index) => (
               <View key={index} style={styles.feedbackCard}>
                 <Text style={styles.feedbackAuthor}>
-                  {f.author} - {f.rating}⭐
+                  {fb.author} - {fb.rating}⭐
                 </Text>
-                <Text style={styles.feedbackComment}>{f.comment}</Text>
-                <Text style={styles.feedbackDate}>{f.date}</Text>
+                <Text style={styles.feedbackComment}>{fb.comment}</Text>
+                <Text style={styles.feedbackDate}>{fb.date}</Text>
               </View>
             ))}
           </View>
-
-          <TouchableOpacity
-            style={styles.closeBtn}
-            onPress={() => router.back()}
-          >
-            <Text style={styles.closeText}>Close</Text>
-          </TouchableOpacity>
-        </View>
+        </Pressable>
       </ScrollView>
-    </View>
+    </Pressable>
   );
 }
 
@@ -181,6 +244,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 5 },
+  },
+  loadingCard: {
+    width: "70%",
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+    alignItems: "center",
   },
   image: {
     width: "100%",
@@ -233,10 +304,28 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginTop: 10,
   },
-  closeText: {
+  retryBtn: {
+    backgroundColor: "#e53935",
+    paddingVertical: 10,
+    paddingHorizontal: 24,
+    borderRadius: 20,
+    marginTop: 12,
+  },
+  retryText: {
     color: "#fff",
     fontWeight: "600",
     fontSize: 16,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#b71c1c",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  errorMessage: {
+    textAlign: "center",
+    color: "#424242",
   },
   feedbackSection: {
     width: "100%",

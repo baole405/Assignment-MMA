@@ -1,153 +1,170 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useState } from "react";
-import product from "@/data/data";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   FlatList,
-  Image,
-  Pressable,
   StyleSheet,
   Text,
   View,
-  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+import { fetchArtTools } from "@/api/artTools";
+import BrandFilter from "@/components/home/BrandFilter";
+import ProductCard from "@/components/home/ProductCard";
+import Search from "@/components/search/component";
+import { ArtTool } from "@/types/artTool";
 
 const HomePage = () => {
   const router = useRouter();
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
-  const [savedProducts, setSavedProducts] = useState<typeof product>([]);
-  const [products] = useState(product);
+  const [savedProducts, setSavedProducts] = useState<ArtTool[]>([]);
+  const [products, setProducts] = useState<ArtTool[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [searchText, setSearchText] = useState<string>("");
 
-  const brands = [...new Set(products.map((p) => p.brand))];
+  const brands = useMemo(
+    () => [...new Set(products.map((p) => p.brand))],
+    [products]
+  );
 
-  // Load saved favorite products
-  const loadSavedProducts = async () => {
+  const loadProducts = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await fetchArtTools();
+      setProducts(data);
+    } catch (err) {
+      console.error("Error fetching art tools", err);
+      setError("Không thể tải danh sách sản phẩm từ mockapi.io");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadSavedProducts = useCallback(async () => {
     try {
       const saved = await AsyncStorage.getItem("savedProducts");
       if (saved) {
         setSavedProducts(JSON.parse(saved));
+      } else {
+        setSavedProducts([]);
       }
-    } catch (error) {
-      console.error("Error loading from AsyncStorage", error);
+    } catch (storageError) {
+      console.error("Error loading from AsyncStorage", storageError);
       Alert.alert("Error", "Failed to load favorite products");
+      setSavedProducts([]);
     }
-  };
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
       loadSavedProducts();
-    }, [])
+    }, [loadSavedProducts])
   );
 
-  const handleIconPress = async (productId: string) => {
-    try {
-      const currentProduct = products.find((p) => p.id === productId);
-      if (!currentProduct) return;
+  useEffect(() => {
+    loadProducts();
+  }, [loadProducts]);
 
-      let newSaved = [...savedProducts];
+  const handleToggleFavorite = useCallback(
+    async (productId: string) => {
+      try {
+        const currentProduct = products.find((p) => p.id === productId);
+        if (!currentProduct) return;
 
-      if (newSaved.some((p) => p.id === productId)) {
-        newSaved = newSaved.filter((p) => p.id !== productId);
-      } else {
-        newSaved.push(currentProduct);
+        let newSaved = [...savedProducts];
+
+        if (newSaved.some((p) => p.id === productId)) {
+          newSaved = newSaved.filter((p) => p.id !== productId);
+        } else {
+          newSaved.push(currentProduct);
+        }
+
+        await AsyncStorage.setItem("savedProducts", JSON.stringify(newSaved));
+        setSavedProducts(newSaved);
+      } catch (err) {
+        console.error("Error saving to AsyncStorage", err);
+        Alert.alert("Error", "Failed to save product to AsyncStorage");
       }
+    },
+    [products, savedProducts]
+  );
 
-      await AsyncStorage.setItem("savedProducts", JSON.stringify(newSaved));
-      setSavedProducts(newSaved);
-    } catch (error) {
-      console.error("Error saving to AsyncStorage", error);
-      Alert.alert("Error", "Failed to save product to AsyncStorage");
-    }
-  };
+  const filteredProducts = useMemo(() => {
+    const normalizedSearch = searchText.trim().toLowerCase();
 
-  // Filter products by selected brand
-  const filteredProducts = selectedBrand
-    ? products.filter((p) => p.brand === selectedBrand)
-    : products;
+    return products.filter((p) => {
+      const matchBrand = selectedBrand ? p.brand === selectedBrand : true;
+      const matchSearch = normalizedSearch
+        ? p.artName.toLowerCase().includes(normalizedSearch)
+        : true;
+      return matchBrand && matchSearch;
+    });
+  }, [products, selectedBrand, searchText]);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color="#e53935" />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Filter Brand */}
-      <View style={styles.brandContainer}>
-        {brands.map((brand) => (
-          <Pressable
-            key={brand}
-            onPress={() =>
-              setSelectedBrand(brand === selectedBrand ? null : brand)
-            }
-            style={[
-              styles.brandButton,
-              { backgroundColor: selectedBrand === brand ? "#e53935" : "#eee" },
-            ]}
-          >
-            <Text
-              style={{
-                color: selectedBrand === brand ? "#fff" : "#333",
-                fontWeight: selectedBrand === brand ? "600" : "500",
-              }}
-            >
-              {brand}
+      {error && (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <View style={styles.retryWrapper}>
+            <Text style={styles.retryLink} onPress={loadProducts}>
+              Thử lại
             </Text>
-          </Pressable>
-        ))}
+          </View>
+        </View>
+      )}
+
+      <View style={styles.searchContainer}>
+        <Search searchText={searchText} setSearchText={setSearchText} />
       </View>
 
-      {/* Product List */}
+      <BrandFilter
+        brands={brands}
+        selectedBrand={selectedBrand}
+        onChange={setSelectedBrand}
+      />
+
       <FlatList
         data={filteredProducts}
-        keyExtractor={(item) => item.id.toString()}
+        keyExtractor={(item) => item.id}
         numColumns={2}
-        renderItem={({ item }) => (
-          <View style={styles.card} key={item.id}>
-            <Pressable
-              style={styles.moreBtn}
-              onPress={() => router.push(`/details?id=${item.id}`)}
-            >
-              <MaterialCommunityIcons
-                name="dots-horizontal-circle-outline"
-                size={22}
-                color="#555"
-              />
-            </Pressable>
-
-            <Pressable
-              style={styles.loveBtn}
-              onPress={() => handleIconPress(item.id)}
-            >
-              <MaterialCommunityIcons
-                name={
-                  savedProducts.some((p) => p.id === item.id)
-                    ? "cards-heart"
-                    : "cards-heart-outline"
-                }
-                size={24}
-                color="black"
-              />
-            </Pressable>
-
-            <Image source={{ uri: item.image }} style={styles.cardImage} />
-
-            <Text style={styles.cardTitle} numberOfLines={2}>
-              {item.artName}
-            </Text>
-
-            <Text style={styles.cardPrice}>
-              {item.price.toLocaleString("en-US", {
-                style: "currency",
-                currency: "USD",
-              })}
-            </Text>
-
-            {item.limitedTimeDeal > 0 && (
-              <Text style={styles.cardDeal}>
-                -{(item.limitedTimeDeal * 100).toFixed(0)}%
-              </Text>
-            )}
-          </View>
-        )}
+        renderItem={({ item }) => {
+          const isFavorite = savedProducts.some((p) => p.id === item.id);
+          return (
+            <ProductCard
+              item={item}
+              isFavorite={isFavorite}
+              onOpenDetails={() => router.push(`/details?id=${item.id}`)}
+              onToggleFavorite={() => handleToggleFavorite(item.id)}
+            />
+          );
+        }}
         contentContainerStyle={styles.list}
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>
+              Không tìm thấy sản phẩm nào cho bộ lọc hiện tại.
+            </Text>
+            <View style={styles.retryWrapper}>
+              <Text style={styles.retryLink} onPress={loadProducts}>
+                Tải lại dữ liệu
+              </Text>
+            </View>
+          </View>
+        }
       />
     </SafeAreaView>
   );
@@ -157,48 +174,50 @@ export default HomePage;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fafafa" },
-  brandContainer: { flexDirection: "row", flexWrap: "wrap", margin: 10 },
-  brandButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginRight: 8,
-    marginBottom: 6,
+  searchContainer: {
+    marginHorizontal: 16,
+    marginTop: 12,
   },
-  list: { padding: 10 },
-  card: {
-    flex: 1,
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    margin: 8,
-    padding: 10,
+  list: { paddingHorizontal: 4, paddingBottom: 24, paddingTop: 8 },
+  centerContent: {
+    justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 3,
-    position: "relative",
   },
-  cardImage: {
-    width: "100%",
-    aspectRatio: 1,
+  errorContainer: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    padding: 12,
     borderRadius: 12,
-    marginBottom: 12,
-    resizeMode: "cover",
+    backgroundColor: "#fdecea",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#f5c6cb",
   },
-  cardTitle: { fontSize: 14, fontWeight: "600", color: "#333", textAlign: "center", marginBottom: 6 },
-  cardPrice: { fontSize: 15, fontWeight: "bold", color: "#e53935", marginBottom: 6 },
-  cardDeal: {
-    fontSize: 12,
+  errorText: {
+    color: "#b71c1c",
+    textAlign: "center",
+    fontWeight: "500",
+  },
+  retryWrapper: {
+    marginTop: 8,
+    alignSelf: "center",
+    backgroundColor: "#e53935",
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  retryLink: {
+    color: "#fff",
     fontWeight: "600",
-    color: "#2e7d32",
-    backgroundColor: "#e8f5e9",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    overflow: "hidden",
   },
-  moreBtn: { position: "absolute", top: 8, right: 8, zIndex: 10 },
-  loveBtn: { position: "absolute", left: 8, top: 8, zIndex: 10 },
+  emptyState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 40,
+  },
+  emptyText: {
+    marginBottom: 12,
+    color: "#424242",
+    textAlign: "center",
+  },
 });

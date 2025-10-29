@@ -1,18 +1,28 @@
 // src/api/gemini.ts
 
 import { GoogleGenAI } from '@google/genai';
+import Constants from 'expo-constants';
 
 // LƯU Ý QUAN TRỌNG:
-// Trong dự án thực tế, KHÔNG hardcode API key như thế này.
-// Thay vào đó, hãy sử dụng biến môi trường (ví dụ: process.env.GEMINI_API_KEY)
-const GEMINI_API_KEY = "AIzaSyDqWdNQPQcxTFKMk2HuhezHxodoDgtZnNw" ; 
+// Không commit API keys vào repository. Thay vào đó hãy cấu hình biến môi trường.
+// Hỗ trợ đọc key từ 3 nguồn (theo thứ tự):
+// 1) process.env.GEMINI_API_KEY (thích hợp cho môi trường node / CI)
+// 2) expo config extra (Constants.expoConfig.extra.GEMINI_API_KEY)
+// 3) manifest.extra (Constants.manifest.extra.GEMINI_API_KEY) - fallback
+const GEMINI_API_KEY =
+    (process.env && process.env.GEMINI_API_KEY) ||
+    (Constants?.expoConfig?.extra?.GEMINI_API_KEY) ||
+    (Constants?.manifest?.extra?.GEMINI_API_KEY) ||
+    "";
 
 if (!GEMINI_API_KEY) {
-    throw new Error("GEMINI_API_KEY chưa được cấu hình. Vui lòng thiết lập biến môi trường.");
+    throw new Error(
+        "GEMINI_API_KEY chưa được cấu hình. Vui lòng tạo file .env (local) hoặc thêm vào app.config.js extra.GEMINI_API_KEY."
+    );
 }
 
-// Khởi tạo Gemini Client
-const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY});
+// Khởi tạo Gemini Client (dùng key từ biến môi trường/config)
+const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 const MODEL_NAME = "gemini-2.5-flash"; // Chọn model phù hợp
 
 /**

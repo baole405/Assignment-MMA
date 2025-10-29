@@ -6,3 +6,11 @@ expo-env.d.ts
 # @end expo-cli
 
 node_modules/*
+**.md
+
+# Local env files (do NOT commit secrets)
+.env
+.env.*.local
+.env.*.local.json
+.env.local
+.env.production
