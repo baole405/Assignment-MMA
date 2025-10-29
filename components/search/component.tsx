@@ -10,11 +10,16 @@ type SearchProps = {
 const SearchComponent = ({ searchText, setSearchText }: SearchProps) => {
   return (
     <View style={styles.container}>
-      <FontAwesome name="search" size={18} color="#757575" style={styles.icon} />
+      <FontAwesome
+        name="search"
+        size={18}
+        color="#5B4BDF"
+        style={styles.icon}
+      />
       <TextInput
         style={styles.input}
-        placeholder="Search art tools..."
-        placeholderTextColor="#9e9e9e"
+        placeholder="Tìm kiếm art tools..."
+        placeholderTextColor="#6F79A8"
         value={searchText}
         onChangeText={setSearchText}
         autoCorrect={false}
@@ -29,15 +34,13 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    paddingHorizontal: 12,
+    backgroundColor: "#ECE7FF",
+    borderRadius: 18,
+    paddingHorizontal: 16,
     paddingVertical: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#CEC4FA",
+    elevation: 0,
     width: "100%",
   },
   icon: {
@@ -45,9 +48,10 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    height: 38,
-    fontSize: 15,
-    color: "#333",
+    height: 40,
+    fontSize: 16,
+    color: "#1D1B3E",
+    fontWeight: "500",
   },
 });
 

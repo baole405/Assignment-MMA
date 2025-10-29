@@ -13,47 +13,64 @@ const BrandFilter = ({ brands, selectedBrand, onChange }: Props) => {
     onChange(next);
   };
 
+  if (brands.length === 0) return null;
+
   return (
     <View style={styles.container}>
-      {brands.map((brand) => {
-        const isActive = brand === selectedBrand;
-        return (
-          <Pressable
-            key={brand}
-            onPress={() => handlePress(brand)}
-            style={[
-              styles.brandButton,
-              { backgroundColor: isActive ? "#e53935" : "#eee" },
-            ]}
-          >
-            <Text
-              style={{
-                color: isActive ? "#fff" : "#333",
-                fontWeight: isActive ? "600" : "500",
-              }}
+      <Text style={styles.heading}>Thương hiệu</Text>
+      <View style={styles.chipRow}>
+        {brands.map((brand) => {
+          const isActive = brand === selectedBrand;
+          return (
+            <Pressable
+              key={brand}
+              onPress={() => handlePress(brand)}
+              style={[
+                styles.brandButton,
+                {
+                  backgroundColor: isActive ? "#5B4BDF" : "rgba(91, 75, 223, 0.08)",
+                  borderColor: isActive ? "#5B4BDF" : "transparent",
+                },
+              ]}
             >
-              {brand}
-            </Text>
-          </Pressable>
-        );
-      })}
+              <Text
+                style={{
+                  color: isActive ? "#fff" : "#3E3B6D",
+                  fontWeight: "600",
+                }}
+              >
+                {brand}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
+    marginTop: 20,
+    marginHorizontal: 16,
+  },
+  heading: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#2E2960",
+    marginBottom: 12,
+  },
+  chipRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginHorizontal: 16,
-    marginTop: 16,
   },
   brandButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
     marginRight: 8,
-    marginBottom: 6,
+    marginBottom: 10,
+    borderWidth: 1,
   },
 });
 

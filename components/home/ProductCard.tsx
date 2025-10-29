@@ -1,6 +1,6 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import React from "react";
-import { Image, Pressable, StyleSheet, Text } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { ArtTool } from "@/types/artTool";
 
@@ -21,19 +21,27 @@ const ProductCard = ({
 
   return (
     <Pressable style={styles.card} onPress={onOpenDetails}>
-      <Pressable
-        style={styles.loveBtn}
-        onPress={(event) => {
-          event.stopPropagation();
-          onToggleFavorite();
-        }}
-      >
-        <MaterialCommunityIcons
-          name={isFavorite ? "cards-heart" : "cards-heart-outline"}
-          size={24}
-          color="black"
-        />
-      </Pressable>
+      <View style={styles.blobOne} />
+      <View style={styles.blobTwo} />
+
+      <View style={styles.fabRow}>
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>{item.brand}</Text>
+        </View>
+        <Pressable
+          style={styles.loveBtn}
+          onPress={(event) => {
+            event.stopPropagation();
+            onToggleFavorite();
+          }}
+        >
+          <MaterialCommunityIcons
+            name={isFavorite ? "heart" : "heart-outline"}
+            size={22}
+            color="#fff"
+          />
+        </Pressable>
+      </View>
 
       <Image source={{ uri: item.image }} style={styles.cardImage} />
 
@@ -49,7 +57,7 @@ const ProductCard = ({
       </Text>
 
       {discount > 0 && (
-        <Text style={styles.cardDeal}>-{(discount * 100).toFixed(0)}%</Text>
+        <Text style={styles.cardDeal}>Save {(discount * 100).toFixed(0)}%</Text>
       )}
     </Pressable>
   );
@@ -58,48 +66,93 @@ const ProductCard = ({
 const styles = StyleSheet.create({
   card: {
     flex: 1,
-    backgroundColor: "#fff",
-    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
     margin: 8,
-    padding: 10,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 3,
+    padding: 16,
+    alignItems: "flex-start",
+    shadowColor: "#5136C2",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 6,
     position: "relative",
+    overflow: "hidden",
   },
-  loveBtn: { position: "absolute", left: 8, top: 8, zIndex: 10 },
+  blobOne: {
+    position: "absolute",
+    top: -90,
+    right: -80,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: "#7158FF",
+    opacity: 0.26,
+  },
+  blobTwo: {
+    position: "absolute",
+    top: -60,
+    left: -100,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: "#9B89FF",
+    opacity: 0.18,
+  },
+  fabRow: {
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  badge: {
+    backgroundColor: "rgba(255,255,255,0.22)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+  },
+  badgeText: {
+    color: "#F5F3FF",
+    fontSize: 12,
+    fontWeight: "600",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  loveBtn: {
+    backgroundColor: "rgba(255,255,255,0.18)",
+    padding: 8,
+    borderRadius: 16,
+  },
   cardImage: {
     width: "100%",
-    aspectRatio: 1,
-    borderRadius: 12,
+    aspectRatio: 1.05,
+    borderRadius: 16,
+    marginTop: 12,
     marginBottom: 12,
     resizeMode: "cover",
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.6)",
   },
   cardTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#333",
-    textAlign: "center",
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#251C5A",
     marginBottom: 6,
   },
   cardPrice: {
-    fontSize: 15,
-    fontWeight: "bold",
-    color: "#e53935",
-    marginBottom: 6,
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#5B4BDF",
+    marginBottom: 4,
   },
   cardDeal: {
     fontSize: 12,
-    fontWeight: "600",
-    color: "#2e7d32",
-    backgroundColor: "#e8f5e9",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    overflow: "hidden",
+    fontWeight: "700",
+    color: "#0E7D6B",
+    backgroundColor: "rgba(14, 125, 107, 0.12)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
 });
 
