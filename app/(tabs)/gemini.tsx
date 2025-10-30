@@ -1,6 +1,7 @@
+import { fetchArtTools } from "@/api/artTools";
 import { generateTextFromGemini } from "@/api/gemini";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -12,70 +13,205 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-export default function ChatBox() {
-  const [messages, setMessages] = useState<{ sender: string; text: string }[]>(
-    []
+import { ArtTool } from "@/types/artTool";
+
+type ChatMessage = { sender: "user" | "bot"; text: string };
+
+const normalizeText = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const buildProductSummary = (tool: ArtTool) => {
+  const dealText =
+    tool.limitedTimeDeal && tool.limitedTimeDeal > 0
+      ? `${Math.round(tool.limitedTimeDeal * 100)}% off`
+      : "không có ưu đãi giới hạn";
+  const glassText = tool.glassSurface
+    ? "phù hợp cả trên bề mặt kính"
+    : "không dành riêng cho bề mặt kính";
+
+  return (
+    `"${tool.artName}" của ${tool.brand} có giá $${tool.price}. ` +
+    `${tool.description} Sản phẩm ${glassText} và hiện ${dealText}.`
   );
+};
+
+export default function ChatBox() {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [catalog, setCatalog] = useState<ArtTool[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadCatalog = async () => {
+      try {
+        setCatalogLoading(true);
+        setCatalogError(null);
+        const data = await fetchArtTools();
+        setCatalog(data);
+      } catch (error) {
+        console.error("Failed to fetch art tools for chat", error);
+        setCatalogError("Không thể tải dữ liệu art tools từ mock API.");
+        setCatalog([]);
+      } finally {
+        setCatalogLoading(false);
+      }
+    };
+
+    loadCatalog();
+  }, []);
+
+  const catalogFacts = useMemo(() => {
+    if (!catalog.length) return "(empty)";
+
+    return catalog
+      .map((tool) => {
+        const feedbackSummary = (tool.feedbacks || [])
+          .slice(0, 2)
+          .map(
+            (feedback) =>
+              `${feedback.author} (${feedback.rating}/5): ${feedback.comment}`
+          )
+          .join(" | ");
+
+        return [
+          `ID: ${tool.id}`,
+          `Tên: ${tool.artName}`,
+          `Thương hiệu: ${tool.brand}`,
+          `Giá: $${tool.price}`,
+          `Bề mặt kính: ${tool.glassSurface ? "có" : "không"}`,
+          `Ưu đãi: ${tool.limitedTimeDeal ? `${
+            Math.round(tool.limitedTimeDeal * 100)
+          }%` : "0%"}`,
+          `Mô tả: ${tool.description}`,
+          feedbackSummary ? `Feedbacks: ${feedbackSummary}` : undefined,
+        ]
+          .filter(Boolean)
+          .join(" | ");
+      })
+      .join("\n");
+  }, [catalog]);
+
+  const findProductInCatalog = (question: string) => {
+    if (!catalog.length) return null;
+    const normalizedQuestion = normalizeText(question);
+    return (
+      catalog.find((tool) =>
+        normalizedQuestion.includes(normalizeText(tool.artName))
+      ) || null
+    );
+  };
 
   const handleSend = async () => {
     if (!input.trim()) return;
-    const userMsg = { sender: "user", text: input };
+    const userMsg: ChatMessage = { sender: "user", text: input };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setLoading(true);
 
     try {
-      // Load local favorites (if any) and create a small context summary
       const raw = await AsyncStorage.getItem("savedProducts");
-      const favorites = raw ? JSON.parse(raw) : [];
+      const favorites: ArtTool[] = raw ? JSON.parse(raw) : [];
 
-      // Simple local intent handling: if the user asks about count of favorites,
-      // answer locally without calling the LLM (faster, private, cheaper).
       const lower = input.toLowerCase();
+      const mentionsFav =
+        /favorite|favorites|yêu thích|danh sách yêu thích|favour/i.test(lower);
       const asksCount = /how many|bao nhi(e|ê)u|số lượng|có bao nhiêu/.test(
         lower
       );
-      const mentionsFav =
-        /favorite|favorites|yêu thích|danh sách yêu thích/.test(lower);
+      const asksList =
+        mentionsFav &&
+        /(g(i|ì)|nào|bao gồm|list|those|gồm những)/.test(lower);
 
-      if (asksCount && mentionsFav) {
+      if (mentionsFav && asksCount) {
         const count = Array.isArray(favorites) ? favorites.length : 0;
-        const names = (favorites || [])
-          .slice(0, 5)
-          .map((f: any) => f.name)
-          .filter(Boolean);
+        const names = favorites.slice(0, 5).map((f) => f.artName);
         const summary =
-          `Bạn có ${count} mục trong danh sách yêu thích.` +
+          `Bạn có ${count} sản phẩm trong danh sách yêu thích.` +
           (names.length
-            ? ` Ví dụ: ${names.join(", ")}${
-                favorites.length > 5 ? ", ..." : ""
+            ? ` Nổi bật: ${names.join(", ")}${
+                favorites.length > 5 ? "..." : ""
               }`
             : "");
-        const botMsg = { sender: "bot", text: summary };
+        const botMsg: ChatMessage = { sender: "bot", text: summary };
         setMessages((prev) => [...prev, botMsg]);
-      } else {
-        // Build a short context for the LLM: count + up to 10 item names (avoid sending entire DB)
-        const count = Array.isArray(favorites) ? favorites.length : 0;
-        const names = (favorites || [])
-          .slice(0, 10)
-          .map((f: any) => f.name)
-          .filter(Boolean);
-        const context = `LOCAL_FAVORITES_COUNT: ${count}\nLOCAL_FAVORITES_NAMES: ${names.join(
-          "; "
-        )}`;
-        const promptWithContext = `${context}\nUser asked: ${input}\nPlease answer in Vietnamese when appropriate.`;
-
-        const reply = await generateTextFromGemini(promptWithContext);
-        const botMsg = { sender: "bot", text: reply };
-        setMessages((prev) => [...prev, botMsg]);
+        return;
       }
+
+      if (mentionsFav && asksList) {
+        if (!favorites.length) {
+          const botMsg: ChatMessage = {
+            sender: "bot",
+            text: "Danh sách yêu thích hiện đang trống. Bạn có thể lưu sản phẩm từ trang chủ.",
+          };
+          setMessages((prev) => [...prev, botMsg]);
+        } else {
+          const botMsg: ChatMessage = {
+            sender: "bot",
+            text: favorites
+              .map((item, index) => `${index + 1}. ${item.artName} ($${item.price})`)
+              .join("\n"),
+          };
+          setMessages((prev) => [...prev, botMsg]);
+        }
+        return;
+      }
+
+      const product = findProductInCatalog(input);
+
+      if (mentionsFav && product) {
+        const isFavorite = favorites.some((fav) => fav.id === product.id);
+        const botMsg: ChatMessage = {
+          sender: "bot",
+          text: isFavorite
+            ? `${product.artName} đã có trong danh sách yêu thích của bạn.`
+            : `${product.artName} chưa nằm trong danh sách yêu thích. Bạn có thể lưu lại từ trang sản phẩm.`,
+        };
+        setMessages((prev) => [...prev, botMsg]);
+        return;
+      }
+
+      if (product) {
+        const botMsg: ChatMessage = {
+          sender: "bot",
+          text: buildProductSummary(product),
+        };
+        setMessages((prev) => [...prev, botMsg]);
+        return;
+      }
+
+      if (!catalog.length && catalogError) {
+        const botMsg: ChatMessage = {
+          sender: "bot",
+          text: catalogError,
+        };
+        setMessages((prev) => [...prev, botMsg]);
+        return;
+      }
+
+      const favoritesSummary = favorites.length
+        ? favorites
+            .map((fav) => `${fav.artName} (${fav.brand}) - $${fav.price}`)
+            .join("; ")
+        : "(no favorites saved)";
+
+      const prompt = `Bạn là trợ lý mua sắm cho art tools. Chỉ sử dụng dữ kiện có trong phần CATALOG và FAVORITES dưới đây. Nếu không chắc chắn, hãy nói rằng bạn không biết.\nCATALOG:\n${catalogFacts}\n\nFAVORITES:\n${favoritesSummary}\n\nCâu hỏi của khách: ${input}`;
+
+      const reply = await generateTextFromGemini(prompt);
+      const botMsg: ChatMessage = { sender: "bot", text: reply };
+      setMessages((prev) => [...prev, botMsg]);
     } catch (err) {
-      const errorMsg = {
+      console.error("Chat error", err);
+      const errorMsg: ChatMessage = {
         sender: "bot",
         text: "❌ Lỗi khi gọi Gemini API.",
-        err,
       };
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
@@ -86,6 +222,21 @@ export default function ChatBox() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.container}>
+        {catalogLoading && (
+          <View style={[styles.banner, styles.bannerInfo]}>
+            <ActivityIndicator size="small" color="#5B4BDF" />
+            <Text style={[styles.bannerText, styles.bannerSpacing]}>
+              Đang tải dữ liệu art tools...
+            </Text>
+          </View>
+        )}
+        {catalogError && !catalogLoading && (
+          <View style={[styles.banner, styles.bannerError]}>
+            <Text style={[styles.bannerText, styles.bannerErrorText]}>
+              {catalogError}
+            </Text>
+          </View>
+        )}
         <ScrollView
           style={styles.chatArea}
           contentContainerStyle={[
@@ -98,7 +249,9 @@ export default function ChatBox() {
           ]}
         >
           {messages.length === 0 ? (
-            <Text style={styles.placeholderText}>Ask Gemini something</Text>
+            <Text style={styles.placeholderText}>
+              Hỏi trợ lý về art tools hoặc danh sách yêu thích của bạn
+            </Text>
           ) : (
             messages.map((msg, index) => (
               <View
@@ -121,11 +274,11 @@ export default function ChatBox() {
             style={styles.input}
             value={input}
             onChangeText={setInput}
-            placeholder="Ask Gemini...  "
+            placeholder="Hãy nhập câu hỏi..."
             placeholderTextColor="#aaa"
           />
           <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
-            <Text style={styles.sendText}>Send</Text>
+            <Text style={styles.sendText}>Gửi</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -142,6 +295,29 @@ const styles = StyleSheet.create({
   chatArea: {
     flex: 1,
     marginBottom: 10,
+  },
+  banner: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+  },
+  bannerInfo: {
+    paddingHorizontal: 2,
+  },
+  bannerText: {
+    color: "#5B4BDF",
+    fontSize: 14,
+  },
+  bannerSpacing: {
+    marginLeft: 8,
+  },
+  bannerError: {
+    backgroundColor: "#fdecec",
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  bannerErrorText: {
+    color: "#d12c2c",
   },
   messageBubble: {
     maxWidth: "80%",
