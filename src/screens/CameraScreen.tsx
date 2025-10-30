@@ -1,206 +1,172 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Linking,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { CameraView, FlashMode, CameraType, useCameraPermissions } from "expo-camera";
+import { CameraView, useCameraPermissions } from "expo-camera";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useFocusEffect, useRouter } from "expo-router";
 
-import { BottomActions } from "@/src/components/BottomActions";
-import { CaptureButton } from "@/src/components/CaptureButton";
-import { colors, radius, spacing, typography } from "@/src/theme/tokens";
-import {
-  LARGE_FILE_THRESHOLD,
-  getFileSize,
-  normalizeAndCompressImage,
-} from "@/src/utils/image";
+import { useCameraModal } from "@/src/hooks/use-camera-modal";
+import { getFileSize, normalizeAndCompressImage } from "@/src/utils/image";
 
-export function CameraScreen() {
+const PURPLE = "#5B4BDF";
+const PURPLE_DARK = "#372C7B";
+const SURFACE = "#F4F2FF";
+const OVERLAY_DARK = "rgba(11, 9, 30, 0.48)";
+
+type Facing = "back" | "front";
+type FlashSetting = "off" | "on";
+
+type CameraScreenProps = {
+  onClose?: () => void;
+};
+
+export default function CameraScreen({ onClose }: CameraScreenProps) {
+  const { close } = useCameraModal();
+  const dismiss = onClose ?? close;
+
   const [permission, requestPermission] = useCameraPermissions();
-  const [isRequestingPermission, setIsRequestingPermission] = useState(false);
-  const [isCapturing, setIsCapturing] = useState(false);
-  const [flashMode, setFlashMode] = useState<FlashMode>(FlashMode.off);
-  const [cameraType, setCameraType] = useState<CameraType>(CameraType.back);
-  const [isCameraReady, setIsCameraReady] = useState(false);
-  const [cameraAvailable, setCameraAvailable] = useState<boolean | null>(null);
+  const [facing, setFacing] = useState<Facing>("back");
+  const [flash, setFlash] = useState<FlashSetting>("off");
+  const insets = useSafeAreaInsets();
+  const [isReady, setIsReady] = useState(false);
+  const [isBusy, setIsBusy] = useState(false);
   const cameraRef = useRef<CameraView | null>(null);
   const router = useRouter();
 
   useEffect(() => {
-    let isMounted = true;
-    (async () => {
-      try {
-        const available =
-          typeof CameraView.isAvailableAsync === "function"
-            ? await CameraView.isAvailableAsync()
-            : true;
-        if (isMounted) {
-          setCameraAvailable(available);
-        }
-      } catch {
-        if (isMounted) {
-          setCameraAvailable(false);
-        }
-      }
-    })();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const handleRetryPermission = useCallback(async () => {
-    setIsRequestingPermission(true);
-    try {
-      await requestPermission();
-    } finally {
-      setIsRequestingPermission(false);
-    }
-  }, [requestPermission]);
-
-  useEffect(() => {
     if (!permission) {
-      void handleRetryPermission();
+      requestPermission().catch(() => {});
     }
-  }, [handleRetryPermission, permission]);
+  }, [permission, requestPermission]);
 
   useFocusEffect(
     useCallback(() => {
-      setFlashMode(FlashMode.off);
-      setIsCameraReady(false);
+      setIsReady(false);
+      setIsBusy(false);
     }, [])
   );
+
+  const ensurePermission = useCallback(async () => {
+    if (permission?.granted) return true;
+    const result = await requestPermission();
+    return result?.granted ?? false;
+  }, [permission?.granted, requestPermission]);
 
   const handleOpenSettings = useCallback(() => {
     Linking.openSettings().catch(() => {
       Alert.alert(
         "Không thể mở cài đặt",
-        "Vui lòng mở phần Cài đặt hệ thống và cấp quyền camera cho ứng dụng."
+        "Hãy mở thủ công phần Cài đặt hệ thống để cấp quyền camera."
       );
     });
   }, []);
 
   const handleToggleFlash = useCallback(() => {
-    setFlashMode((current) =>
-      current === FlashMode.off ? FlashMode.on : FlashMode.off
-    );
+    setFlash((prev) => (prev === "off" ? "on" : "off"));
   }, []);
 
-  const handleSwitchCamera = useCallback(() => {
-    setCameraType((current) =>
-      current === CameraType.back ? CameraType.front : CameraType.back
-    );
+  const handleSwitchFacing = useCallback(() => {
+    setFacing((prev) => (prev === "back" ? "front" : "back"));
   }, []);
 
   const handleCapture = useCallback(async () => {
-    if (!cameraRef.current || isCapturing) {
+    if (!cameraRef.current || isBusy) {
+      return;
+    }
+
+    const granted = await ensurePermission();
+    if (!granted) {
+      Alert.alert(
+        "Chưa cấp quyền",
+        "Ứng dụng cần quyền camera để tiếp tục chụp ảnh."
+      );
       return;
     }
 
     try {
-      setIsCapturing(true);
+      setIsBusy(true);
       const photo = await cameraRef.current.takePictureAsync({
         quality: 0.8,
-        base64: false,
-        exif: true,
         skipProcessing: true,
       });
 
-      const originalSize = await getFileSize(photo.uri);
+      const originalSize = photo?.uri
+        ? await getFileSize(photo.uri)
+        : undefined;
 
-      if (originalSize > LARGE_FILE_THRESHOLD) {
-        Alert.alert(
-          "Ảnh lớn",
-          "Ảnh vượt quá 10MB. Ứng dụng sẽ nén ảnh để tải lên nhanh hơn."
-        );
+      const processed = photo?.uri
+        ? await normalizeAndCompressImage(photo.uri)
+        : undefined;
+
+      if (!processed) {
+        throw new Error("Không thể xử lý ảnh");
       }
 
-      const processed = await normalizeAndCompressImage(photo.uri);
-      const previewParams = {
-        uri: processed.uri,
-        width: String(processed.width),
-        height: String(processed.height),
-        size: String(processed.size),
-        originalSize: String(originalSize),
-      };
-
-      router.push({ pathname: "/preview", params: previewParams });
-    } catch {
-      Alert.alert("Không thể chụp ảnh", "Vui lòng thử lại.");
+      router.replace({
+        pathname: "/preview",
+        params: {
+          uri: processed.uri,
+          width: String(processed.width),
+          height: String(processed.height),
+          size: String(processed.size),
+          originalSize: originalSize ? String(originalSize) : undefined,
+        },
+      });
+    } catch (err) {
+      console.error(err);
+      Alert.alert("Lỗi", "Không thể chụp ảnh. Vui lòng thử lại.");
     } finally {
-      setIsCapturing(false);
+      setIsBusy(false);
     }
-  }, [isCapturing, router]);
+  }, [ensurePermission, isBusy, router]);
 
-  const renderPermissionRequest = () => (
-    <View style={styles.centerContent}>
-      <ActivityIndicator size="large" color={colors.primary} />
-      <Text style={styles.permissionText} accessibilityRole="text">
-        Đang xin quyền truy cập camera...
-      </Text>
-    </View>
-  );
+  const permissionState = useMemo(() => {
+    if (!permission) return "checking";
+    if (!permission.granted) return "denied";
+    return "granted";
+  }, [permission]);
 
-  if (cameraAvailable === false) {
+  if (permissionState === "checking") {
     return (
       <View style={styles.centerContent}>
-        <Text style={styles.title}>Không tìm thấy camera</Text>
-        <Text style={styles.bodyText}>
-          Vui lòng thử trên thiết bị thật hoặc đảm bảo thiết bị của bạn có camera.
-        </Text>
+        <ActivityIndicator size="large" color={PURPLE} />
+        <Text style={styles.bodyText}>Đang kiểm tra quyền truy cập...</Text>
       </View>
     );
   }
 
-  if (isRequestingPermission) {
-    return renderPermissionRequest();
-  }
-
-  if (!permission?.granted) {
+  if (permissionState === "denied") {
     return (
       <View style={styles.centerContent}>
         <Text style={styles.title}>Cần quyền truy cập camera</Text>
         <Text style={styles.bodyText}>
-          Chúng tôi cần quyền để mở camera và chụp ảnh. Hãy cấp quyền trong Cài đặt.
+          Cấp quyền camera để chụp, lưu và cập nhật hình ảnh cho bộ sưu tập của bạn.
         </Text>
-        <View style={styles.permissionButtons}>
-          {permission?.canAskAgain ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Thử cấp quyền lại"
-              onPress={() => {
-                void handleRetryPermission();
-              }}
-              style={[styles.secondaryButton, styles.permissionAction]}
-              hitSlop={spacing.sm}
-            >
-              <Text style={styles.secondaryButtonText}>Thử lại</Text>
-            </Pressable>
-          ) : null}
+        <View style={styles.permissionActions}>
           <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Mở cài đặt"
+            style={[styles.secondaryButton, styles.permissionButton]}
+            onPress={() => requestPermission()}
+          >
+            <Text style={styles.secondaryButtonText}>Thử lại</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.primaryButton, styles.permissionButton]}
             onPress={handleOpenSettings}
-            style={[styles.primaryButton, styles.permissionAction]}
-            hitSlop={spacing.sm}
           >
             <Text style={styles.primaryButtonText}>Mở cài đặt</Text>
           </Pressable>
         </View>
-      </View>
-    );
-  }
-
-  if (cameraAvailable === null) {
-    return (
-      <View style={styles.centerContent}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <Pressable onPress={dismiss} style={styles.dismissLink}>
+          <Text style={styles.dismissText}>Đóng</Text>
+        </Pressable>
       </View>
     );
   }
@@ -209,68 +175,78 @@ export function CameraScreen() {
     <View style={styles.container}>
       <CameraView
         ref={cameraRef}
-        style={StyleSheet.absoluteFill}
-        onCameraReady={() => setIsCameraReady(true)}
-        facing={cameraType}
-        flash={flashMode}
+        style={styles.camera}
+        facing={facing}
+        flash={flash}
+        onCameraReady={() => setIsReady(true)}
       />
 
       <View style={styles.overlay} pointerEvents="none">
-        {!isCameraReady ? (
-          <View style={styles.loaderOverlay}>
-            <ActivityIndicator size="large" color={colors.surface} />
+        {!isReady ? (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color="#FFFFFF" />
           </View>
         ) : null}
       </View>
 
-      <View style={styles.bottomContainer} pointerEvents="box-none">
-        <BottomActions
-          leftAction={
-            <Pressable
-              accessibilityLabel="Bật hoặc tắt đèn flash"
-              accessibilityRole="button"
-              onPress={handleToggleFlash}
-              style={styles.iconButton}
-              hitSlop={spacing.sm}
-              disabled={isCapturing}
-            >
-              <MaterialCommunityIcons
-                name={flashMode === FlashMode.off ? "flash-off" : "flash"}
-                size={28}
-                color={colors.surface}
-              />
-              <Text style={styles.iconLabel} allowFontScaling>
-                {flashMode === FlashMode.off ? "Flash tắt" : "Flash bật"}
-              </Text>
-            </Pressable>
-          }
-          captureButton={
-            <CaptureButton
-              onPress={handleCapture}
-              disabled={!isCameraReady || isCapturing}
-              loading={isCapturing}
+      <View
+        style={[styles.topBar, { paddingTop: insets.top + 12 }]}
+        pointerEvents="box-none"
+      >
+        <Pressable
+          style={styles.closeButton}
+          onPress={dismiss}
+          accessibilityRole="button"
+          accessibilityLabel="Đóng camera"
+        >
+          <MaterialCommunityIcons name="close" size={26} color="#FFFFFF" />
+        </Pressable>
+      </View>
+
+      <View style={styles.bottomBar} pointerEvents="box-none">
+        <View style={styles.actionsRow}>
+          <Pressable
+            style={styles.actionButton}
+            onPress={handleToggleFlash}
+            disabled={isBusy}
+          >
+            <MaterialCommunityIcons
+              name={flash === "off" ? "flash-off" : "flash"}
+              size={28}
+              color="#FFFFFF"
             />
-          }
-          rightAction={
-            <Pressable
-              accessibilityLabel="Đổi camera trước sau"
-              accessibilityRole="button"
-              onPress={handleSwitchCamera}
-              style={styles.iconButton}
-              hitSlop={spacing.sm}
-              disabled={isCapturing}
-            >
-              <MaterialCommunityIcons
-                name="camera-switch"
-                size={28}
-                color={colors.surface}
-              />
-              <Text style={styles.iconLabel} allowFontScaling>
-                Đổi camera
-              </Text>
-            </Pressable>
-          }
-        />
+            <Text style={styles.actionLabel}>
+              {flash === "off" ? "Flash tắt" : "Flash bật"}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            style={styles.captureButton}
+            onPress={handleCapture}
+            disabled={!isReady || isBusy}
+          >
+            <View style={styles.captureOuter}>
+              {isBusy ? (
+                <ActivityIndicator color={PURPLE} />
+              ) : (
+                <View style={styles.captureInner} />
+              )}
+            </View>
+          </Pressable>
+
+          <Pressable
+            style={styles.actionButton}
+            onPress={handleSwitchFacing}
+            disabled={isBusy}
+          >
+            <MaterialCommunityIcons
+              name="camera-sync"
+              size={28}
+              color="#FFFFFF"
+            />
+            <Text style={styles.actionLabel}>Đổi camera</Text>
+          </Pressable>
+        </View>
       </View>
     </View>
   );
@@ -281,94 +257,129 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#000",
   },
-  centerContent: {
+  camera: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: spacing.lg,
-    backgroundColor: colors.surface,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
   },
-  loaderOverlay: {
+  loadingOverlay: {
     flex: 1,
-    justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.28)",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.4)",
   },
-  bottomContainer: {
+  topBar: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 20,
+    zIndex: 20,
+  },
+  closeButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  bottomBar: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    paddingBottom: Platform.select({ ios: spacing.lg, default: spacing.md }),
-    paddingTop: spacing.lg,
-    justifyContent: "flex-end",
+    paddingHorizontal: 24,
+    paddingBottom: 28,
+    paddingTop: 12,
+    backgroundColor: OVERLAY_DARK,
   },
-  iconButton: {
+  actionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  actionButton: {
+    alignItems: "center",
+    gap: 6,
+  },
+  actionLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
+  captureButton: {
+    padding: 4,
+  },
+  captureOuter: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    borderWidth: 4,
+    borderColor: "#FFFFFF",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.18)",
+  },
+  captureInner: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    backgroundColor: "#FFFFFF",
+  },
+  centerContent: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    padding: spacing.xs,
-  },
-  iconLabel: {
-    marginTop: spacing.xs,
-    color: colors.surface,
-    fontSize: typography.caption,
-    fontWeight: "600",
+    backgroundColor: SURFACE,
+    paddingHorizontal: 24,
+    gap: 20,
   },
   title: {
     fontSize: 22,
-    fontWeight: "700",
-    marginBottom: spacing.sm,
-    color: colors.textPrimary,
+    fontWeight: "800",
+    color: PURPLE_DARK,
     textAlign: "center",
   },
   bodyText: {
-    fontSize: typography.body,
-    color: colors.textSecondary,
+    fontSize: 15,
+    lineHeight: 22,
+    color: "#6F79A8",
     textAlign: "center",
-    marginBottom: spacing.lg,
   },
-  permissionText: {
-    marginTop: spacing.sm,
-    fontSize: typography.body,
-    color: colors.textSecondary,
-    textAlign: "center",
+  permissionActions: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  permissionButton: {
+    minWidth: 140,
+    paddingVertical: 12,
+    borderRadius: 20,
+    alignItems: "center",
   },
   primaryButton: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.sm,
-    minWidth: 160,
-  },
-  secondaryButton: {
-    borderWidth: 1,
-    borderColor: colors.textSecondary,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.sm,
-    minWidth: 140,
-    backgroundColor: colors.surface,
+    backgroundColor: PURPLE,
   },
   primaryButtonText: {
-    color: colors.onPrimary,
-    fontSize: typography.body,
-    fontWeight: "600",
-    textAlign: "center",
+    color: "#FFFFFF",
+    fontWeight: "700",
+    fontSize: 15,
+  },
+  secondaryButton: {
+    backgroundColor: "#ECE7FF",
   },
   secondaryButtonText: {
-    color: colors.textPrimary,
-    fontSize: typography.body,
-    fontWeight: "600",
-    textAlign: "center",
+    color: PURPLE_DARK,
+    fontWeight: "700",
+    fontSize: 15,
   },
-  permissionButtons: {
-    flexDirection: "row",
-    gap: spacing.sm,
+  dismissLink: {
+    marginTop: 16,
   },
-  permissionAction: {
-    flex: 1,
+  dismissText: {
+    color: PURPLE,
+    fontWeight: "700",
+    fontSize: 15,
   },
 });
