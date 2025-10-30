@@ -32,8 +32,11 @@ export async function normalizeAndCompressImage(uri: string): Promise<ProcessedI
 }
 
 export async function getFileSize(uri: string): Promise<number> {
-  const info = await FileSystem.getInfoAsync(uri, { size: true });
-  return info.size ?? 0;
+  const info = await FileSystem.getInfoAsync(uri);
+  if (!info.exists || typeof info.size !== "number") {
+    return 0;
+  }
+  return info.size;
 }
 
 export function formatBytes(size: number): string {

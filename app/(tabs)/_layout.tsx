@@ -39,9 +39,9 @@ export default function TabLayout() {
           shadowRadius: 12,
           shadowOffset: { width: 0, height: 8 },
         },
-      }}
-      sceneContainerStyle={{
-        backgroundColor: palette.background,
+        sceneStyle: {
+          backgroundColor: palette.background,
+        },
       }}
     >
       <Tabs.Screen

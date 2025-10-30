@@ -70,11 +70,23 @@ export default function CameraScreen({ onClose }: CameraScreenProps) {
   }, []);
 
   const handleToggleFlash = useCallback(() => {
+<<<<<<< HEAD
     setFlash((prev) => (prev === "off" ? "on" : "off"));
   }, []);
 
   const handleSwitchFacing = useCallback(() => {
     setFacing((prev) => (prev === "back" ? "front" : "back"));
+=======
+    setFlashMode((current: FlashMode) =>
+      current === FlashMode.off ? FlashMode.on : FlashMode.off
+    );
+  }, []);
+
+  const handleSwitchCamera = useCallback(() => {
+    setCameraType((current: CameraType) =>
+      current === CameraType.back ? CameraType.front : CameraType.back
+    );
+>>>>>>> c11d63ce213abcd8f6f346689152b15eb91e3404
   }, []);
 
   const handleCapture = useCallback(async () => {
