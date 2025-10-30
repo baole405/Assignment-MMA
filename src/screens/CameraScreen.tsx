@@ -70,15 +70,11 @@ export default function CameraScreen({ onClose }: CameraScreenProps) {
   }, []);
 
   const handleToggleFlash = useCallback(() => {
-    setFlashMode((current) =>
-      current === FlashMode.off ? FlashMode.on : FlashMode.off
-    );
+    setFlash((prev) => (prev === "off" ? "on" : "off"));
   }, []);
 
-  const handleSwitchCamera = useCallback(() => {
-    setCameraType((current) =>
-      current === CameraType.back ? CameraType.front : CameraType.back
-    );
+  const handleSwitchFacing = useCallback(() => {
+    setFacing((prev) => (prev === "back" ? "front" : "back"));
   }, []);
 
   const handleCapture = useCallback(async () => {
