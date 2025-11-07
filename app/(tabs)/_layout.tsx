@@ -62,7 +62,7 @@ export default function TabLayout() {
           ),
         }}
       />
-      <Tabs.Screen
+      {/* <Tabs.Screen
         name="maps"
         options={{
           title: "Maps",
@@ -70,7 +70,7 @@ export default function TabLayout() {
             <MaterialCommunityIcons name="map-marker-radius-outline" size={26} color={color} />
           ),
         }}
-      />
+      /> */}
       <Tabs.Screen
         name="camera"
         options={{

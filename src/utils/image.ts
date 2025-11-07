@@ -1,4 +1,8 @@
-import * as FileSystem from "expo-file-system";
+// Use the legacy filesystem API to avoid deprecation warnings from the new
+// `expo-file-system` methods like getInfoAsync. The legacy import keeps the
+// existing synchronous helpers working while we migrate to the new File/Directory
+// API later if needed.
+import * as FileSystem from "expo-file-system/legacy";
 import * as ImageManipulator from "expo-image-manipulator";
 
 export interface ProcessedImage {

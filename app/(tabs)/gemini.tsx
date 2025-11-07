@@ -4,6 +4,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,11 +13,18 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
 import { ArtTool } from "@/types/artTool";
 
 type ChatMessage = { sender: "user" | "bot"; text: string };
+
+const TAB_BAR_HEIGHT = 72;
+const TAB_BAR_BOTTOM_OFFSET = 18;
+const MIN_BOTTOM_SPACING = 12;
 
 const normalizeText = (value: string) =>
   value
@@ -48,6 +57,11 @@ export default function ChatBox() {
   const [catalog, setCatalog] = useState<ArtTool[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
+  const insets = useSafeAreaInsets();
+  const bottomPadding =
+    Math.max(insets.bottom, MIN_BOTTOM_SPACING) +
+    TAB_BAR_HEIGHT +
+    TAB_BAR_BOTTOM_OFFSET;
 
   useEffect(() => {
     const loadCatalog = async () => {
@@ -87,9 +101,11 @@ export default function ChatBox() {
           `Thương hiệu: ${tool.brand}`,
           `Giá: $${tool.price}`,
           `Bề mặt kính: ${tool.glassSurface ? "có" : "không"}`,
-          `Ưu đãi: ${tool.limitedTimeDeal ? `${
-            Math.round(tool.limitedTimeDeal * 100)
-          }%` : "0%"}`,
+          `Ưu đãi: ${
+            tool.limitedTimeDeal
+              ? `${Math.round(tool.limitedTimeDeal * 100)}%`
+              : "0%"
+          }`,
           `Mô tả: ${tool.description}`,
           feedbackSummary ? `Feedbacks: ${feedbackSummary}` : undefined,
         ]
@@ -127,8 +143,7 @@ export default function ChatBox() {
         lower
       );
       const asksList =
-        mentionsFav &&
-        /(g(i|ì)|nào|bao gồm|list|those|gồm những)/.test(lower);
+        mentionsFav && /(g(i|ì)|nào|bao gồm|list|those|gồm những)/.test(lower);
 
       if (mentionsFav && asksCount) {
         const count = Array.isArray(favorites) ? favorites.length : 0;
@@ -156,7 +171,10 @@ export default function ChatBox() {
           const botMsg: ChatMessage = {
             sender: "bot",
             text: favorites
-              .map((item, index) => `${index + 1}. ${item.artName} ($${item.price})`)
+              .map(
+                (item, index) =>
+                  `${index + 1}. ${item.artName} ($${item.price})`
+              )
               .join("\n"),
           };
           setMessages((prev) => [...prev, botMsg]);
@@ -220,68 +238,76 @@ export default function ChatBox() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.container}>
-        {catalogLoading && (
-          <View style={[styles.banner, styles.bannerInfo]}>
-            <ActivityIndicator size="small" color="#5B4BDF" />
-            <Text style={[styles.bannerText, styles.bannerSpacing]}>
-              Đang tải dữ liệu art tools...
-            </Text>
-          </View>
-        )}
-        {catalogError && !catalogLoading && (
-          <View style={[styles.banner, styles.bannerError]}>
-            <Text style={[styles.bannerText, styles.bannerErrorText]}>
-              {catalogError}
-            </Text>
-          </View>
-        )}
-        <ScrollView
-          style={styles.chatArea}
-          contentContainerStyle={[
-            { paddingVertical: 10 },
-            messages.length === 0 && {
-              flex: 1,
-              justifyContent: "center",
-              alignItems: "center",
-            },
-          ]}
-        >
-          {messages.length === 0 ? (
-            <Text style={styles.placeholderText}>
-              Hỏi trợ lý về art tools hoặc danh sách yêu thích của bạn
-            </Text>
-          ) : (
-            messages.map((msg, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.messageBubble,
-                  msg.sender === "user" ? styles.userBubble : styles.botBubble,
-                ]}
-              >
-                <Text style={styles.messageText}>{msg.text}</Text>
-              </View>
-            ))
+    <SafeAreaView style={[styles.container, { paddingBottom: bottomPadding }]}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={TAB_BAR_HEIGHT + TAB_BAR_BOTTOM_OFFSET}
+        style={styles.fill}
+      >
+        <View style={styles.fill}>
+          {catalogLoading && (
+            <View style={[styles.banner, styles.bannerInfo]}>
+              <ActivityIndicator size="small" color="#5B4BDF" />
+              <Text style={[styles.bannerText, styles.bannerSpacing]}>
+                Đang tải dữ liệu art tools...
+              </Text>
+            </View>
           )}
+          {catalogError && !catalogLoading && (
+            <View style={[styles.banner, styles.bannerError]}>
+              <Text style={[styles.bannerText, styles.bannerErrorText]}>
+                {catalogError}
+              </Text>
+            </View>
+          )}
+          <ScrollView
+            style={styles.chatArea}
+            contentContainerStyle={[
+              styles.chatContent,
+              messages.length === 0 && {
+                flex: 1,
+                justifyContent: "center",
+                alignItems: "center",
+              },
+            ]}
+          >
+            {messages.length === 0 ? (
+              <Text style={styles.placeholderText}>
+                Hỏi trợ lý về art tools hoặc danh sách yêu thích của bạn
+              </Text>
+            ) : (
+              messages.map((msg, index) => (
+                <View
+                  key={index}
+                  style={[
+                    styles.messageBubble,
+                    msg.sender === "user"
+                      ? styles.userBubble
+                      : styles.botBubble,
+                  ]}
+                >
+                  <Text style={styles.messageText}>{msg.text}</Text>
+                </View>
+              ))
+            )}
 
-          {loading && <ActivityIndicator size="small" color="#555" />}
-        </ScrollView>
+            {loading && <ActivityIndicator size="small" color="#555" />}
+          </ScrollView>
 
-        <View style={styles.inputArea}>
-          <TextInput
-            style={styles.input}
-            value={input}
-            onChangeText={setInput}
-            placeholder="Hãy nhập câu hỏi..."
-            placeholderTextColor="#aaa"
-          />
-          <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
-            <Text style={styles.sendText}>Gửi</Text>
-          </TouchableOpacity>
+          <View style={styles.inputArea}>
+            <TextInput
+              style={styles.input}
+              value={input}
+              onChangeText={setInput}
+              placeholder="Hãy nhập câu hỏi..."
+              placeholderTextColor="#aaa"
+            />
+            <TouchableOpacity style={styles.sendButton} onPress={handleSend}>
+              <Text style={styles.sendText}>Gửi</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -292,9 +318,15 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     paddingInline: 20,
   },
+  fill: {
+    flex: 1,
+  },
   chatArea: {
     flex: 1,
     marginBottom: 10,
+  },
+  chatContent: {
+    paddingVertical: 10,
   },
   banner: {
     flexDirection: "row",

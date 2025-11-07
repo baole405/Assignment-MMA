@@ -48,3 +48,34 @@ Join our community of developers creating universal apps.
 
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+
+## Adding animated GIFs to this repository
+
+You can include animated GIFs in your repo and display them directly on GitHub README files. A short checklist and examples below will help make them load and render well:
+
+- Best practice: keep GIF file size reasonable (under a few MB). If the animation is long or high-resolution, consider an MP4/WebM alternative which is much smaller and plays on GitHub when embedded as an image link.
+- Place GIFs inside the repository (for example `assets/images/`) and commit them. Using relative paths keeps links working across branches.
+
+Examples:
+
+- Markdown (relative path):
+
+  ```markdown
+  ![Demo animation](./assets/images/demo.gif)
+  ```
+
+- Markdown with specific size (HTML tag) — works in GitHub READMEs:
+
+  ```html
+  <img src="./assets/images/demo.gif" alt="Demo" width="600" />
+  ```
+
+Notes:
+
+- After you push the GIF to GitHub, the image will render on the README automatically. If you update the file, allow a few seconds for GitHub to reflect the latest version.
+- Use optimized GIFs or convert to compressed video when possible to improve loading performance for visitors.
+
+If you want, I can:
+
+- Add a sample GIF to `assets/images/` and update this README to show it inline, or
+- Add a small section that explains converting GIF → MP4 and embedding for a smaller footprint.

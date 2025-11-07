@@ -1,5 +1,6 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   Alert,
@@ -10,7 +11,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect, useRouter } from "expo-router";
 
 import ProductCard from "@/components/home/ProductCard";
 import Search from "@/components/search/component";
@@ -37,14 +37,19 @@ const FavoriteList = () => {
     }, [refreshFavorites])
   );
 
-  const handleRemoveFavorite = useCallback(
-    async (id: string) => {
-      const updated = favorites.filter((item) => item.id !== id);
-      setFavorites(updated);
-      await AsyncStorage.setItem("savedProducts", JSON.stringify(updated));
-    },
-    [favorites]
-  );
+  const handleRemoveFavorite = useCallback(async (id: string) => {
+    // Use functional update to avoid stale closures when removing an item.
+    setFavorites((prev) => {
+      const updated = prev.filter((item) => item.id !== id);
+      // Persist change; don't await here to avoid blocking UI — handle errors separately.
+      AsyncStorage.setItem("savedProducts", JSON.stringify(updated)).catch(
+        (err) => {
+          console.error("Failed to persist favorites after remove", err);
+        }
+      );
+      return updated;
+    });
+  }, []);
 
   const removeAllFavorites = useCallback(() => {
     Alert.alert("Xóa tất cả", "Bạn có chắc chắn muốn xóa mọi mục đã lưu?", [
@@ -53,8 +58,16 @@ const FavoriteList = () => {
         text: "Xóa",
         style: "destructive",
         onPress: async () => {
-          setFavorites([]);
-          await AsyncStorage.removeItem("savedProducts");
+          try {
+            setFavorites([]);
+            await AsyncStorage.removeItem("savedProducts");
+          } catch (err) {
+            console.error("Failed to clear savedProducts", err);
+            Alert.alert(
+              "Lỗi",
+              "Không thể xóa toàn bộ danh sách. Vui lòng thử lại."
+            );
+          }
         },
       },
     ]);
